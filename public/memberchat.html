@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Claire — Member Chat</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #16242F; color: #E8E0D5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 40px 20px; }
+    h1 { color: #C9A882; font-size: 2rem; margin-bottom: 8px; }
+    .subtitle { color: #8A9BA8; margin-bottom: 40px; }
+    .cards { display: flex; flex-direction: column; gap: 16px; width: 100%; max-width: 480px; }
+    .card { background: #1E3040; border: 1px solid #2A4060; border-radius: 12px; padding: 20px 24px; display: flex; align-items: center; justify-content: space-between; }
+    .card-name { font-size: 1.1rem; font-weight: 600; color: #E8E0D5; }
+    .card-id { font-size: 0.8rem; color: #8A9BA8; margin-top: 4px; }
+    .card-btn { background: #C9A882; color: #16242F; border: none; border-radius: 8px; padding: 10px 20px; font-weight: 600; cursor: pointer; text-decoration: none; font-size: 0.9rem; }
+    .card-btn:hover { background: #D4B896; }
+    .loading { color: #8A9BA8; margin-top: 40px; }
+    .error { color: #E07070; margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <h1>Claire</h1>
+  <p class="subtitle">Medicare Advantage Member Services</p>
+  <div id="status" class="loading">Loading members...</div>
+  <div class="cards" id="cards"></div>
+  <script src="/utils.js"></script>
+  <script>
+    async function loadPatients() {
+      try {
+        const res = await fetch('/api/patients');
+        if (!res.ok) throw new Error('Failed to load');
+        const patients = await res.json();
+        document.getElementById('status').style.display = 'none';
+        const cards = document.getElementById('cards');
+        if (patients.length === 0) {
+          cards.innerHTML = '<p class="error">No members found.</p>';
+          return;
+        }
+        cards.innerHTML = patients.map(p => `
+          <div class="card">
+            <div>
+              <div class="card-name">${escHtml(p.displayName)}</div>
+              <div class="card-id">ID: ${escHtml(p.patientId)}</div>
+            </div>
+            <a class="card-btn" href="/memberchat/${encodeURIComponent(p.patientId)}">Start Chat</a>
+          </div>
+        `).join('');
+      } catch (err) {
+        document.getElementById('status').textContent = 'Error loading members. Is the server running?';
+        document.getElementById('status').className = 'error';
+      }
+    }
+    loadPatients();
+  </script>
+</body>
+</html>

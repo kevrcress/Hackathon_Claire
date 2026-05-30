@@ -1,0 +1,21 @@
+# HVE artifacts — excluded from project repo
+.claude-hve-tracking/
+.claude/
+instructions/
+prompts/
+claire-implementation-guide.md
+
+# Reference docs
+Docs/
+
+# Environment — never commit credentials
+.env
+.env.local
+.env.*
+
+# Build output
+dist/
+node_modules/
+
+# macOS
+.DS_Store

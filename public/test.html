@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Claire · Test</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #16242F; color: #E8DFD0; font-family: sans-serif; padding: 40px; }
+    h1 { color: #C9A882; margin-bottom: 24px; }
+    #chat { max-width: 600px; margin-bottom: 16px; display: flex; flex-direction: column; gap: 8px; }
+    .msg { padding: 10px 14px; border-radius: 8px; max-width: 80%; font-size: 14px; line-height: 1.5; }
+    .member { background: #1E3040; align-self: flex-start; }
+    .claire { background: #1A3A30; color: #B8E8D8; align-self: flex-end; }
+    #row { display: flex; gap: 8px; max-width: 600px; }
+    input { flex: 1; background: #1E3040; border: 1px solid #2A4255; border-radius: 8px; color: #E8DFD0; font-size: 14px; padding: 10px 14px; outline: none; }
+    button { background: #129684; color: white; border: none; border-radius: 8px; padding: 10px 20px; cursor: pointer; font-size: 14px; }
+    button:disabled { opacity: 0.4; }
+    #status { font-size: 12px; color: #4A6070; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <h1>Claire · Krava Test</h1>
+  <div id="chat"></div>
+  <div id="row">
+    <input id="input" type="text" placeholder="Say something..." autofocus>
+    <button id="btn">Send</button>
+  </div>
+  <div id="status"></div>
+  <script>
+    const chat = document.getElementById('chat');
+    const input = document.getElementById('input');
+    const btn = document.getElementById('btn');
+    const status = document.getElementById('status');
+
+    function add(text, role) {
+      const d = document.createElement('div');
+      d.className = `msg ${role}`;
+      d.textContent = text;
+      chat.appendChild(d);
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    async function send() {
+      const msg = input.value.trim();
+      if (!msg) return;
+      input.value = '';
+      btn.disabled = true;
+      status.textContent = 'Waiting...';
+      add(msg, 'member');
+      try {
+        const res = await fetch('/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: msg, sessionId: 'test-session' }),
+        });
+        const data = await res.json();
+        if (data.response) { add(data.response, 'claire'); status.textContent = ''; }
+        else status.textContent = `Error: ${data.error}`;
+      } catch (e) {
+        status.textContent = `Network error: ${e.message}`;
+      } finally {
+        btn.disabled = false;
+        input.focus();
+      }
+    }
+
+    btn.addEventListener('click', send);
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') send(); });
+  </script>
+</body>
+</html>

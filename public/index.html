@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Claire Dashboard</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #16242F; color: #E8E0D5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; height: 100vh; display: flex; flex-direction: column; }
+    .topbar { background: #1E3040; border-bottom: 1px solid #2A4060; padding: 12px 24px; display: flex; align-items: center; gap: 16px; }
+    .topbar h1 { color: #C9A882; font-size: 1.3rem; }
+    .sse-dot { width: 10px; height: 10px; border-radius: 50%; background: #555; margin-left: auto; }
+    .sse-dot.connected { background: #4CAF50; }
+    .sse-label { font-size: 0.8rem; color: #8A9BA8; }
+    .session-select { background: #16242F; border: 1px solid #2A4060; border-radius: 6px; color: #E8E0D5; padding: 6px 12px; font-size: 0.9rem; }
+    .layout { flex: 1; display: flex; overflow: hidden; }
+    .panel-left { width: 320px; min-width: 280px; border-right: 1px solid #2A4060; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+    .panel-right { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+    .section-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; color: #8A9BA8; margin-bottom: 8px; }
+    .member-name { font-size: 1.2rem; font-weight: 700; color: #C9A882; }
+    .member-detail { font-size: 0.85rem; color: #8A9BA8; margin-top: 4px; }
+    .progress-wrap { background: #2A4060; border-radius: 8px; height: 8px; overflow: hidden; margin-top: 6px; }
+    .progress-bar { height: 100%; background: #C9A882; border-radius: 8px; transition: width 0.4s; }
+    .acc-row { display: flex; justify-content: space-between; font-size: 0.85rem; margin-top: 4px; }
+    .acc-label { color: #8A9BA8; }
+    .acc-value { color: #E8E0D5; font-weight: 600; }
+    .thread { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 12px; }
+    .chat-msg { max-width: 75%; padding: 10px 14px; border-radius: 10px; font-size: 0.9rem; line-height: 1.5; }
+    .chat-msg-member { background: #2A4060; align-self: flex-start; }
+    .chat-msg-claire { background: #C9A882; color: #16242F; align-self: flex-end; }
+    .chat-label { font-size: 0.72rem; color: #8A9BA8; margin-bottom: 3px; }
+    .chat-label-claire { color: #7A6A50; }
+    .typing-dash { color: #8A9BA8; font-style: italic; font-size: 0.85rem; align-self: flex-end; }
+    .footer { background: #1E3040; border-top: 1px solid #2A4060; padding: 8px 20px; font-size: 0.75rem; color: #556677; text-align: center; }
+    .waiting { color: #8A9BA8; text-align: center; margin: 40px auto; font-style: italic; }
+    .plan-badge { display: inline-block; background: #2A4060; border-radius: 6px; padding: 3px 8px; font-size: 0.75rem; color: #C9A882; margin-top: 6px; }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <h1>Claire Dashboard</h1>
+    <select class="session-select" id="session-select">
+      <option value="">— Select member session —</option>
+    </select>
+    <span class="sse-label" id="sse-label">Connecting...</span>
+    <span class="sse-dot" id="sse-dot"></span>
+  </div>
+  <div class="layout">
+    <div class="panel-left" id="panel-left">
+      <div class="waiting" id="left-waiting">Waiting for activity...</div>
+    </div>
+    <div class="panel-right">
+      <div class="thread" id="thread">
+        <div class="waiting" id="right-waiting">Select a session to view the conversation.</div>
+      </div>
+      <div class="footer" id="footer">Read-only monitor — member chat at /memberchat</div>
+    </div>
+  </div>
+  <script src="/utils.js"></script>
+  <script>
+    let currentPatientId = null;
+    const sessionMap = new Map(); // patientId -> ConversationState
+    const threadMap = new Map(); // patientId -> [{role, text}]
+
+    // SSE
+    const evtSrc = new EventSource('/events');
+    evtSrc.onopen = () => {
+      document.getElementById('sse-dot').className = 'sse-dot connected';
+      document.getElementById('sse-label').textContent = 'Live';
+    };
+    evtSrc.onerror = () => {
+      document.getElementById('sse-dot').className = 'sse-dot';
+      document.getElementById('sse-label').textContent = 'Disconnected';
+    };
+
+    evtSrc.addEventListener('sessions_updated', e => {
+      const { sessions } = JSON.parse(e.data);
+      updateSessionDropdown(sessions);
+    });
+
+    evtSrc.addEventListener('session_started', e => {
+      const { patientId, displayName } = JSON.parse(e.data);
+      if (!threadMap.has(patientId)) threadMap.set(patientId, []);
+    });
+
+    evtSrc.addEventListener('message_received', e => {
+      const { patientId, message } = JSON.parse(e.data);
+      if (!threadMap.has(patientId)) threadMap.set(patientId, []);
+      threadMap.get(patientId).push({ role: 'member', text: message });
+      if (patientId === currentPatientId) appendChatMsg('member', message);
+      showTypingFor(patientId);
+    });
+
+    evtSrc.addEventListener('claire_typing', e => {
+      const { patientId } = JSON.parse(e.data);
+      if (patientId === currentPatientId) showTypingIndicator();
+    });
+
+    evtSrc.addEventListener('claire_response', e => {
+      const { patientId, response } = JSON.parse(e.data);
+      hideTypingFor(patientId);
+      if (!threadMap.has(patientId)) threadMap.set(patientId, []);
+      threadMap.get(patientId).push({ role: 'claire', text: response });
+      if (patientId === currentPatientId) {
+        hideTypingIndicator();
+        appendChatMsg('claire', response);
+      }
+    });
+
+    evtSrc.addEventListener('claire_error', e => {
+      const { patientId } = JSON.parse(e.data);
+      hideTypingFor(patientId);
+      if (patientId === currentPatientId) {
+        hideTypingIndicator();
+        appendChatMsg('error', 'Stream error — Claire could not respond.');
+      }
+      document.getElementById('footer').style.color = '#E07070';
+      document.getElementById('footer').textContent = `Stream error for ${patientId} — check server logs`;
+      setTimeout(() => {
+        document.getElementById('footer').style.color = '';
+        document.getElementById('footer').textContent = 'Read-only monitor — member chat at /memberchat';
+      }, 8000);
+    });
+
+    function updateSessionDropdown(sessions) {
+      const sel = document.getElementById('session-select');
+      const current = sel.value;
+      // Keep placeholder option
+      sel.innerHTML = '<option value="">— Select member session —</option>';
+      for (const s of sessions) {
+        sessionMap.set(s.patientId, s);
+        const opt = document.createElement('option');
+        opt.value = s.patientId;
+        opt.textContent = s.patientId.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+        sel.appendChild(opt);
+      }
+      if (current && sessions.some(s => s.patientId === current)) {
+        sel.value = current;
+      }
+    }
+
+    document.getElementById('session-select').addEventListener('change', async e => {
+      const patientId = e.target.value;
+      if (!patientId) {
+        currentPatientId = null;
+        document.getElementById('left-waiting').style.display = '';
+        document.getElementById('panel-left').innerHTML = '<div class="waiting" id="left-waiting">Waiting for activity...</div>';
+        document.getElementById('thread').innerHTML = '<div class="waiting" id="right-waiting">Select a session to view the conversation.</div>';
+        return;
+      }
+      currentPatientId = patientId;
+      await loadMemberPanel(patientId);
+      renderThread(patientId);
+    });
+
+    async function loadMemberPanel(patientId) {
+      const left = document.getElementById('panel-left');
+      try {
+        const res = await fetch(`/api/patient/${encodeURIComponent(patientId)}`);
+        const data = await res.json();
+        const acc = data.accumulators;
+        const dedPct = acc.deductibleTotal > 0 ? Math.min(100, (acc.deductiblePaid / acc.deductibleTotal) * 100) : 0;
+        const oopPct = acc.oopTotal > 0 ? Math.min(100, (acc.oopPaid / acc.oopTotal) * 100) : 0;
+        left.innerHTML = `
+          <div>
+            <div class="section-label">Member</div>
+            <div class="member-name">${escHtml(data.displayName)}</div>
+            <div class="member-detail">DOB: ${escHtml(data.dateOfBirth ?? 'N/A')}</div>
+            <div class="member-detail">ID: ${escHtml(data.memberId)}</div>
+            ${data.phone ? `<div class="member-detail">Phone: ${escHtml(data.phone)}</div>` : ''}
+            ${data.address ? `<div class="member-detail">${escHtml(data.address)}</div>` : ''}
+            <div class="plan-badge">${escHtml(data.planName)}</div>
+          </div>
+          <div>
+            <div class="section-label">Deductible (${acc.planYear || data.planYear})</div>
+            <div class="acc-row"><span class="acc-label">Paid</span><span class="acc-value">$${fmt(acc.deductiblePaid)} / $${fmt(acc.deductibleTotal)}</span></div>
+            <div class="progress-wrap"><div class="progress-bar" style="width:${dedPct.toFixed(1)}%"></div></div>
+          </div>
+          <div>
+            <div class="section-label">Out-of-Pocket</div>
+            <div class="acc-row"><span class="acc-label">Paid</span><span class="acc-value">$${fmt(acc.oopPaid)} / $${fmt(acc.oopTotal)}</span></div>
+            <div class="progress-wrap"><div class="progress-bar" style="width:${oopPct.toFixed(1)}%"></div></div>
+          </div>
+        `;
+      } catch {
+        left.innerHTML = '<div class="waiting">Failed to load member data.</div>';
+      }
+    }
+
+    function renderThread(patientId) {
+      const thread = document.getElementById('thread');
+      thread.innerHTML = '';
+      const msgs = threadMap.get(patientId) ?? [];
+      if (msgs.length === 0) {
+        thread.innerHTML = '<div class="waiting" id="right-waiting">No messages yet for this session.</div>';
+        return;
+      }
+      for (const m of msgs) appendChatMsg(m.role, m.text);
+    }
+
+    function appendChatMsg(role, text) {
+      const thread = document.getElementById('thread');
+      const wait = document.getElementById('right-waiting');
+      if (wait) wait.remove();
+      const wrap = document.createElement('div');
+      const label = document.createElement('div');
+      label.className = role === 'claire' ? 'chat-label chat-label-claire' : 'chat-label';
+      label.textContent = role === 'member' ? 'Member' : 'Claire';
+      const msg = document.createElement('div');
+      msg.className = `chat-msg chat-msg-${role}`;
+      msg.textContent = text;
+      wrap.appendChild(label);
+      wrap.appendChild(msg);
+      thread.appendChild(wrap);
+      thread.scrollTop = thread.scrollHeight;
+    }
+
+    function showTypingIndicator() {
+      if (document.getElementById('typing-dash')) return;
+      const thread = document.getElementById('thread');
+      const t = document.createElement('div');
+      t.className = 'typing-dash';
+      t.id = 'typing-dash';
+      t.textContent = 'Claire is typing...';
+      thread.appendChild(t);
+      thread.scrollTop = thread.scrollHeight;
+    }
+
+    function hideTypingIndicator() {
+      const t = document.getElementById('typing-dash');
+      if (t) t.remove();
+    }
+
+    const typingTimers = new Map();
+    function showTypingFor(patientId) {
+      if (typingTimers.has(patientId)) clearTimeout(typingTimers.get(patientId));
+    }
+    function hideTypingFor(patientId) {
+      if (typingTimers.has(patientId)) clearTimeout(typingTimers.get(patientId));
+      typingTimers.delete(patientId);
+    }
+
+  </script>
+</body>
+</html>
