@@ -1,13 +1,13 @@
 import { LoadedPatientData, Claim, Medication } from './loader';
 
 export const DEMO_PLAN = {
-  planId: 'humana-usaa-honor-giveback-h5525-079',
+  planId: 'claire-ma-gold-001',
   planName: 'Claire Medicare Advantage Gold',
-  contractId: 'H5525',
-  planNumber: '079',
+  contractId: 'C0001',
+  planNumber: '001',
   planType: 'PPO',
-  insurer: 'Humana',
-  source: 'https://www.medicare.org/medicare-advantage-plans/plan/H5525-079-0/',
+  insurer: 'Claire Health',
+  source: '',
   sourceDate: '2026-01-23',
 
   defaultBenefits: {
@@ -73,11 +73,11 @@ export const DEMO_PLAN = {
   },
 
   partD: {
-    planId: 'S5884-157-0',
-    planName: 'Humana Premier Rx Plan',
-    contractId: 'S5884',
-    planNumber: '157',
-    insurer: 'Humana',
+    planId: 'claire-rx-001',
+    planName: 'Claire Premier Rx Plan',
+    contractId: 'C0001',
+    planNumber: '001',
+    insurer: 'Claire Health',
     planYear: 2026,
     source: 'https://www.medicareplans.com/prescription-drugs/plan/S5884-157-0/',
     sourceDate: '2026-01-23',
