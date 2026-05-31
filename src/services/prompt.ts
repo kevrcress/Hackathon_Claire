@@ -111,8 +111,14 @@ function recentClaimsText(claims: Claim[]): string {
   if (claims.length === 0) return 'None on file';
   return claims
     .map(c => {
-      const provider = c.providerName.startsWith('NPI:') ? 'Your provider' : c.providerName;
-      return `- ${fmtDate(c.serviceDate)}: ${provider} (${c.claimType}) — Status: ${c.status}${c.isDenied ? ' (denied)' : ''} — Billed: ${fmt(c.billedAmount)}, You owe: ${fmt(c.memberOwes)}`;
+      const where = [c.facilityName, c.specialty].filter(Boolean).join(' — ');
+      let line = `- ${fmtDate(c.serviceDate)}: ${c.providerName}`;
+      if (where) line += ` (${where})`;
+      line += ` — ${c.serviceDescription}`;
+      line += ` — Status: ${c.status}${c.isDenied ? ' (denied)' : ''}`;
+      if (c.isDenied && c.denialReason) line += ` — Denial reason: ${c.denialReason}`;
+      line += ` — Billed: ${fmt(c.billedAmount)}, You owe: ${fmt(c.memberOwes)}`;
+      return line;
     })
     .join('\n');
 }
@@ -123,7 +129,8 @@ function medicationsText(meds: Medication[]): string {
     .map(m => {
       let line = `- ${m.name}`;
       if (m.dosage) line += ` — ${m.dosage}`;
-      line += ` (${m.status})`;
+      if (m.tier) line += ` (${m.tier})`;
+      if (m.refillsRemaining !== undefined) line += `, ${m.refillsRemaining} refill${m.refillsRemaining !== 1 ? 's' : ''} remaining`;
       if (m.prescriberName) line += `, prescribed by ${m.prescriberName}`;
       return line;
     })
@@ -166,6 +173,7 @@ Date of Birth: ${member.dateOfBirth}
 Member ID: ${member.memberId}
 Plan: ${DEMO_PLAN.planName}
 Plan Year: ${b.planYear}
+${member.primaryCareProvider ? 'Primary Care Provider: ' + member.primaryCareProvider : ''}
 ${member.phone ? 'Phone: ' + member.phone : ''}
 ${member.address ? 'Address: ' + member.address : ''}
 

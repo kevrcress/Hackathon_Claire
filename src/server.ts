@@ -3,7 +3,6 @@ import express from 'express';
 import path from 'path';
 import { createKravaPlatformClient } from '@kravalabs/api-client';
 import { loadAllPatients, getPatientList } from './services/loader';
-import { calculateAccumulators } from './services/accumulator';
 import { buildSystemPrompt, DEMO_PLAN } from './services/prompt';
 import { getConversation, saveConversation, getActiveSessions } from './services/conversation';
 import { streamKravaChat } from './services/krava';
@@ -26,16 +25,6 @@ app.use(express.static(path.join(__dirname, '../public')));
 
 const testDataDir = path.join(__dirname, '../test-data');
 const patients = loadAllPatients(testDataDir);
-
-// Calculate accumulators for each patient
-for (const [, data] of patients) {
-  data.accumulators = calculateAccumulators(
-    data.claims,
-    DEMO_PLAN.defaultBenefits.individualDeductible,
-    DEMO_PLAN.defaultBenefits.individualOopMax,
-    String(DEMO_PLAN.defaultBenefits.planYear)
-  );
-}
 
 console.log(`[claire] Loaded ${patients.size} patients: ${Array.from(patients.keys()).join(', ')}`);
 
@@ -106,9 +95,13 @@ app.get('/api/patient/:patientId', (req, res) => {
     recentClaims: data.claims.slice(0, 8).map(c => ({
       serviceDate: c.serviceDate,
       providerName: c.providerName,
+      facilityName: c.facilityName,
+      specialty: c.specialty,
+      serviceDescription: c.serviceDescription,
       claimType: c.claimType,
       status: c.status,
       isDenied: c.isDenied,
+      denialReason: c.denialReason,
       billedAmount: c.billedAmount / 100,
       planPaid: c.planPaid / 100,
       memberOwes: c.memberOwes / 100,
@@ -187,6 +180,8 @@ app.post('/chat', async (req, res) => {
 app.get('/test', (_, res) => res.sendFile(path.join(__dirname, '../public/test.html')));
 app.get('/minMemberChat', (_, res) => res.sendFile(path.join(__dirname, '../public/memberchat.html')));
 app.get('/minMemberChat/:patientId', (_, res) => res.sendFile(path.join(__dirname, '../public/memberchat-session.html')));
+app.get('/memberchat', (_, res) => res.sendFile(path.join(__dirname, '../public/memberchat.html')));
+app.get('/memberchat/:patientId', (_, res) => res.sendFile(path.join(__dirname, '../public/memberchat-session.html')));
 app.get('/minDashboard', (_, res) => res.sendFile(path.join(__dirname, '../public/index.html')));
 app.get('/dashboard', (_, res) => res.sendFile(path.join(__dirname, '../public/dashboard.html')));
 app.get('/', (_, res) => res.sendFile(path.join(__dirname, '../public/dashboard.html')));
