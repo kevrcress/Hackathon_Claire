@@ -23,6 +23,12 @@ export function calculateAccumulators(
     totalMemberOwes += claim.memberOwes;
   }
 
+  // Synthea fallback: deductibleApplied is sparse in Synthea data, use memberOwes as proxy
+  let deductiblePaid = totalDeductible;
+  if (deductiblePaid === 0 && deductibleTotal > 0) {
+    deductiblePaid = Math.min(totalMemberOwes, deductibleTotal);
+  }
+
   // Synthea fallback: if oopPaid is 0, sum totalMemberOwes instead
   let oopPaid = totalDeductible + totalCopay + totalCoinsurance;
   if (oopPaid === 0) {
@@ -30,7 +36,7 @@ export function calculateAccumulators(
   }
 
   // Cap both at their respective maximums
-  const deductiblePaid = Math.min(totalDeductible, deductibleTotal);
+  deductiblePaid = Math.min(deductiblePaid, deductibleTotal);
   oopPaid = Math.min(oopPaid, oopTotal);
 
   return {

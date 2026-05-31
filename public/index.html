@@ -53,7 +53,7 @@
       <div class="thread" id="thread">
         <div class="waiting" id="right-waiting">Select a session to view the conversation.</div>
       </div>
-      <div class="footer" id="footer">Read-only monitor — member chat at /memberchat</div>
+      <div class="footer" id="footer">Read-only monitor — member chat at /minMemberChat</div>
     </div>
   </div>
   <script src="/utils.js"></script>
@@ -110,15 +110,13 @@
     evtSrc.addEventListener('claire_error', e => {
       const { patientId } = JSON.parse(e.data);
       hideTypingFor(patientId);
-      if (patientId === currentPatientId) {
-        hideTypingIndicator();
-        appendChatMsg('error', 'Stream error — Claire could not respond.');
-      }
-      document.getElementById('footer').style.color = '#E07070';
-      document.getElementById('footer').textContent = `Stream error for ${patientId} — check server logs`;
+      if (patientId === currentPatientId) hideTypingIndicator();
+      const footer = document.getElementById('footer');
+      footer.style.color = '#E07070';
+      footer.textContent = `Stream error for ${escHtml(patientId)} — check server logs`;
       setTimeout(() => {
-        document.getElementById('footer').style.color = '';
-        document.getElementById('footer').textContent = 'Read-only monitor — member chat at /memberchat';
+        footer.style.color = '';
+        footer.textContent = 'Read-only monitor — member chat at /minMemberChat';
       }, 8000);
     });
 

@@ -1,4 +1,6 @@
 import 'dotenv/config';
+console.log('[debug] KRAVA_APP_KEY present:', !!process.env.KRAVA_APP_KEY, 'length:', process.env.KRAVA_APP_KEY?.length ?? 0);
+console.log('[debug] KRAVA_BASE_URL:', process.env.KRAVA_BASE_URL);
 import express from 'express';
 import path from 'path';
 import { createKravaPlatformClient } from '@kravalabs/api-client';
@@ -6,6 +8,8 @@ import { loadAllPatients, getPatientList } from './services/loader';
 import { calculateAccumulators } from './services/accumulator';
 import { buildSystemPrompt, DEMO_PLAN } from './services/prompt';
 import { getConversation, saveConversation, getActiveSessions } from './services/conversation';
+import { streamKravaChat } from './services/krava';
+import { createLinqRouter } from './routes/webhooks/linq';
 
 const app = express();
 const PORT = parseInt(process.env.PORT ?? '3000');
@@ -20,41 +24,6 @@ const chatIds = new Map<string, string>(); // sessionId -> chatId
 
 interface SseClient { write(data: string): boolean }
 
-async function* streamKravaChat(
-  userToken: string,
-  message: string,
-  opts: { chatId?: string; system?: string }
-): AsyncGenerator<{ chatId?: string; text?: string }> {
-  const response = await fetch(`${KRAVA_BASE_URL}/api/platform/chat`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${userToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ message, chatId: opts.chatId, system: opts.system }),
-  });
-  if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`Krava ${response.status}: ${errText}`);
-  }
-  if (!response.body) throw new Error('Krava response has no body');
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  outer: while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    for (const line of decoder.decode(value).split('\n')) {
-      if (!line.startsWith('data: ')) continue;
-      const data = line.slice(6).trim();
-      if (data === '[DONE]') break outer;
-      try {
-        yield JSON.parse(data) as { chatId?: string; text?: string };
-      } catch { console.warn('[krava] malformed SSE chunk:', data); }
-    }
-  }
-}
-
-app.use(express.json());
 app.use(express.static(path.join(__dirname, '../public')));
 
 const testDataDir = path.join(__dirname, '../test-data');
@@ -64,13 +33,16 @@ const patients = loadAllPatients(testDataDir);
 for (const [, data] of patients) {
   data.accumulators = calculateAccumulators(
     data.claims,
-    DEMO_PLAN.deductibleTotal,
-    DEMO_PLAN.oopTotal,
-    DEMO_PLAN.planYear
+    DEMO_PLAN.defaultBenefits.individualDeductible,
+    DEMO_PLAN.defaultBenefits.individualOopMax,
+    String(DEMO_PLAN.defaultBenefits.planYear)
   );
 }
 
 console.log(`[claire] Loaded ${patients.size} patients: ${Array.from(patients.keys()).join(', ')}`);
+
+app.use('/webhooks/linq', express.raw({ type: 'application/json' }), createLinqRouter(patients, platform));
+app.use(express.json());
 
 const sseClients = new Set<SseClient>();
 
@@ -123,7 +95,7 @@ app.get('/api/patient/:patientId', (req, res) => {
     phone: data.member.phone,
     address: data.member.address,
     planName: DEMO_PLAN.planName,
-    planYear: DEMO_PLAN.planYear,
+    planYear: String(DEMO_PLAN.defaultBenefits.planYear),
     coverage: data.coverage,
     accumulators: {
       deductiblePaid: acc.deductiblePaid / 100,
@@ -215,10 +187,11 @@ app.post('/chat', async (req, res) => {
 });
 
 app.get('/test', (_, res) => res.sendFile(path.join(__dirname, '../public/test.html')));
-
-app.get('/memberchat', (_, res) => res.sendFile(path.join(__dirname, '../public/memberchat.html')));
-app.get('/memberchat/:patientId', (_, res) => res.sendFile(path.join(__dirname, '../public/memberchat-session.html')));
-app.get('/', (_, res) => res.sendFile(path.join(__dirname, '../public/index.html')));
+app.get('/minMemberChat', (_, res) => res.sendFile(path.join(__dirname, '../public/memberchat.html')));
+app.get('/minMemberChat/:patientId', (_, res) => res.sendFile(path.join(__dirname, '../public/memberchat-session.html')));
+app.get('/minDashboard', (_, res) => res.sendFile(path.join(__dirname, '../public/index.html')));
+app.get('/dashboard', (_, res) => res.sendFile(path.join(__dirname, '../public/dashboard.html')));
+app.get('/', (_, res) => res.sendFile(path.join(__dirname, '../public/dashboard.html')));
 
 app.listen(PORT, () => {
   console.log(`[claire] http://localhost:${PORT}/test`);

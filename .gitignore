@@ -12,6 +12,10 @@ Docs/
 .env
 .env.local
 .env.*
+*.pem
+*.key
+*.p12
+*.pfx
 
 # Build output
 dist/
