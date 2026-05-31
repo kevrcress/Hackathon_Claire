@@ -1,6 +1,4 @@
 import 'dotenv/config';
-console.log('[debug] KRAVA_APP_KEY present:', !!process.env.KRAVA_APP_KEY, 'length:', process.env.KRAVA_APP_KEY?.length ?? 0);
-console.log('[debug] KRAVA_BASE_URL:', process.env.KRAVA_BASE_URL);
 import express from 'express';
 import path from 'path';
 import { createKravaPlatformClient } from '@kravalabs/api-client';
