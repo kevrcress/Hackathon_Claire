@@ -12,6 +12,9 @@ const app = express();
 const PORT = parseInt(process.env.PORT ?? '3000');
 const KRAVA_BASE_URL = process.env.KRAVA_BASE_URL ?? 'https://krava.io';
 
+const rawKey = process.env.KRAVA_APP_KEY ?? '';
+console.log('[debug] KRAVA_APP_KEY length:', rawKey.length, '| first8:', rawKey.slice(0, 8), '| last8:', rawKey.slice(-8), '| repr:', JSON.stringify(rawKey.slice(0, 4) + '...' + rawKey.slice(-4)));
+
 const platform = createKravaPlatformClient({
   baseUrl: KRAVA_BASE_URL,
   appKey: process.env.KRAVA_APP_KEY!,
